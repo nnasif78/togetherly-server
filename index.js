@@ -3,6 +3,7 @@ import express from "express";
 import { MongoClient, ObjectId } from "mongodb";
 import cors from "cors";
 import dotenv from "dotenv";
+import { verifyToken } from "./middleware.js";
 
 dotenv.config();
 
@@ -44,34 +45,24 @@ async function startServer() {
     res.status(500).send({ message: "Failed to get event." });
   }
 });
-app.get("/my-events", async (req, res) => {
-  try {
-    const { userId } = req.query;
+app.get("/my-events", verifyToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
 
-    if (!userId) {
-      return res.status(400).send({ message: "User ID is required." });
+        const events = await db.collection("events")
+            .find({ createdBy: userId })
+            .toArray();
+
+        res.send(events);
+    } catch (error) {
+        console.error("Get my events error:", error);
+        res.status(500).send({ message: "Failed to get your events." });
     }
-
-    const events = await db.collection("events")
-      .find({ createdBy: userId })
-      .toArray();
-
-    res.send(events);
-  } catch (error) {
-    console.error("Get my events error:", error);
-    res.status(500).send({ message: "Failed to get your events." });
-  }
 });
-app.get("/joined-events", async (req, res) => {
+app.get("/joined-events", verifyToken, async (req, res) => {
   try {
-    const { userId } = req.query;
-
-    if (!userId) {
-      return res.status(400).send({ message: "User ID is required." });
-    }
-
     const events = await db.collection("events")
-      .find({ participants: userId })
+      .find({ participants: req.user.id })
       .toArray();
 
     res.send(events);
@@ -80,9 +71,9 @@ app.get("/joined-events", async (req, res) => {
     res.status(500).send({ message: "Failed to get joined events." });
   }
 });
-    app.post("/events", async (req, res) => {
+    app.post("/events", verifyToken, async (req, res) => {
         try {
-            const { title, description, date, location, category, maxParticipants, image, createdBy } = req.body;
+            const { title, description, date, location, category, maxParticipants, image } = req.body;
 
             if (!title || !description || !date || !location || !category) {
                 return res.status(400).send({ message: "Please provide all required fields." });
@@ -96,7 +87,7 @@ app.get("/joined-events", async (req, res) => {
                 category,
                 maxParticipants: Number(maxParticipants) || 0,
                 image: image || "",
-                createdBy,
+                createdBy: req.user.id,
                 participants: [],
                 createdAt: new Date(),
             };
@@ -110,17 +101,11 @@ app.get("/joined-events", async (req, res) => {
         }
     });
 
-    app.delete("/events/:id", async (req, res) => {
+    app.delete("/events/:id", verifyToken, async (req, res) => {
         try {
-            const { userId } = req.body;
-
-            if (!userId) {
-                return res.status(400).send({ message: "User ID is required." });
-            }
-
             const result = await db.collection("events").deleteOne({
                 _id: new ObjectId(req.params.id),
-                createdBy: userId,
+                createdBy: req.user.id,
             });
 
             if (result.deletedCount === 0) {
@@ -133,7 +118,7 @@ app.get("/joined-events", async (req, res) => {
             res.status(500).send({ message: "Failed to delete event." });
         }
     });
-    app.put("/events/:id", async (req, res) => {
+    app.put("/events/:id", verifyToken, async (req, res) => {
         try {
             const { title, description, date, location, category, maxParticipants, image } = req.body;
 
@@ -142,7 +127,7 @@ app.get("/joined-events", async (req, res) => {
             }
 
             const result = await db.collection("events").updateOne(
-                { _id: new ObjectId(req.params.id) },
+                { _id: new ObjectId(req.params.id), createdBy: req.user.id },
                 {
                     $set: {
                         title,
@@ -168,34 +153,32 @@ app.get("/joined-events", async (req, res) => {
         }
     });
 
-    app.post("/events/:id/join", async (req, res) => {
+    app.post("/events/:id/join", verifyToken, async (req, res) => {
         try {
-            const { userId } = req.body;
-
-            if (!userId) {
-                return res.status(400).send({ message: "User ID is required." });
-            }
-
-            const event = await db.collection("events").findOne({
-                _id: new ObjectId(req.params.id),
-            });
-
-            if (!event) {
-                return res.status(404).send({ message: "Event not found." });
-            }
-
-            if (event.participants?.includes(userId)) {
-                return res.status(400).send({ message: "You have already joined this event." });
-            }
-
-            if (event.participants?.length >= event.maxParticipants) {
-                return res.status(400).send({ message: "This event is full." });
-            }
-
-            await db.collection("events").updateOne(
-                { _id: new ObjectId(req.params.id) },
+            const eventId = new ObjectId(req.params.id);
+            const userId = req.user.id;
+            const result = await db.collection("events").updateOne(
+                {
+                    _id: eventId,
+                    participants: { $ne: userId },
+                    $expr: {
+                        $lt: [
+                            { $size: { $ifNull: ["$participants", []] } },
+                            "$maxParticipants",
+                        ],
+                    },
+                },
                 { $addToSet: { participants: userId } }
             );
+
+            if (result.matchedCount === 0) {
+                const event = await db.collection("events").findOne({ _id: eventId });
+                if (!event) return res.status(404).send({ message: "Event not found." });
+                if (event.participants?.includes(userId)) {
+                    return res.status(400).send({ message: "You have already joined this event." });
+                }
+                return res.status(400).send({ message: "This event is full." });
+            }
 
             res.send({ message: "You joined the event successfully!" });
         } catch (error) {

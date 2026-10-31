@@ -1,0 +1,32 @@
+import { jwtVerify, createRemoteJWKSet } from "jose";
+
+export async function verifyToken(req, res, next) {
+  try {
+    const JWKS = createRemoteJWKSet(
+      new URL(`${process.env.CLIENT_URL}/api/auth/jwks`)
+    );
+
+    const authorization = req.headers.authorization;
+
+    if (!authorization?.startsWith("Bearer ")) {
+      return res.status(401).send({ message: "Unauthorized. Token required." });
+    }
+
+    const token = authorization.split(" ")[1];
+
+    const { payload } = await jwtVerify(token, JWKS, {
+      issuer: process.env.CLIENT_URL,
+      audience: process.env.CLIENT_URL,
+    });
+
+    req.user = {
+      id: payload.sub,
+      email: payload.email,
+    };
+
+    next();
+  } catch (error) {
+    console.error("JWT verification error:", error.message);
+    res.status(401).send({ message: "Invalid or expired token." });
+  }
+}
