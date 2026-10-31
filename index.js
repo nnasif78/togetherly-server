@@ -8,12 +8,43 @@ import { verifyToken } from "./middleware.js";
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const client = new MongoClient(process.env.MONGODB_URI);
+const db = client.db(process.env.DATABASE_NAME);
+let connectionPromise;
 
-app.use(cors({ origin: process.env.CLIENT_URL }));
+const frontendOrigin = process.env.CLIENT_URL
+    ? new URL(process.env.CLIENT_URL).origin
+    : null;
+const allowedOrigins = new Set(
+    [frontendOrigin, "http://localhost:3000"].filter(Boolean)
+);
+
+app.use(cors({
+    origin(origin, callback) {
+        callback(null, !origin || allowedOrigins.has(origin));
+    },
+}));
 app.use(express.json());
 
-const client = new MongoClient(process.env.MONGODB_URI);
+app.get("/", (req, res) => {
+    res.send("Togetherly API is running");
+});
+
+app.use(async (req, res, next) => {
+    try {
+        if (!connectionPromise) {
+            connectionPromise = client.connect().catch((error) => {
+                connectionPromise = undefined;
+                throw error;
+            });
+        }
+        await connectionPromise;
+        next();
+    } catch (error) {
+        console.error("MongoDB connection error:", error);
+        res.status(500).send({ message: "Database connection failed." });
+    }
+});
 
 function parseFutureEventDate(value) {
     if (typeof value !== "string") return null;
@@ -51,16 +82,6 @@ function createEventSlug(event) {
     const titleSlug = slugifyEventTitle(event.title) || "community-event";
     return `${titleSlug}-${date.toISOString().slice(0, 10)}`;
 }
-
-async function startServer() {
-    await client.connect();
-    console.log("MongoDB connected!");
-
-    const db = client.db(process.env.DATABASE_NAME);
-
-    app.get("/", (req, res) => {
-        res.send("Togetherly API is running");
-    });
 
     app.get("/events", async (req, res) => {
         const events = await db.collection("events")
@@ -279,9 +300,4 @@ app.get("/joined-events", verifyToken, async (req, res) => {
         }
     });
 
-    app.listen(PORT, () => {
-        console.log(`Server running on port ${PORT}`);
-    });
-}
-
-startServer();
+export default app;
