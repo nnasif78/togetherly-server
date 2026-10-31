@@ -109,6 +109,43 @@ async function startServer() {
     res.status(500).send({ message: "Failed to update event." });
   }
     });
+    
+app.post("/events/:id/join", async (req, res) => {
+  try {
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).send({ message: "User ID is required." });
+    }
+
+    const event = await db.collection("events").findOne({
+      _id: new ObjectId(req.params.id),
+    });
+
+    if (!event) {
+      return res.status(404).send({ message: "Event not found." });
+    }
+
+    if (event.participants?.includes(userId)) {
+      return res.status(400).send({ message: "You have already joined this event." });
+    }
+
+    if (event.participants?.length >= event.maxParticipants) {
+      return res.status(400).send({ message: "This event is full." });
+    }
+
+    await db.collection("events").updateOne(
+      { _id: new ObjectId(req.params.id) },
+      { $addToSet: { participants: userId } }
+    );
+
+    res.send({ message: "You joined the event successfully!" });
+  } catch (error) {
+    console.error("Join event error:", error);
+    res.status(500).send({ message: "Failed to join event." });
+  }
+});
+
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });
