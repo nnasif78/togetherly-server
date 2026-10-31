@@ -196,6 +196,7 @@ app.get("/joined-events", verifyToken, async (req, res) => {
                 maxParticipants: Number(maxParticipants) || 0,
                 image: image || "",
                 createdBy: req.user.id,
+                createdByEmail: req.user.email,
                 participants: [],
                 createdAt: new Date(),
             };

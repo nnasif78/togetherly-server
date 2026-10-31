@@ -141,12 +141,13 @@ Event documents live in the `events` MongoDB collection. A typical document has 
   "maxParticipants": 20,
   "image": "https://example.com/garden.jpg",
   "createdBy": "Better Auth user ID",
+  "createdByEmail": "organizer@example.com",
   "participants": ["Better Auth user ID"],
   "createdAt": "2026-10-01T12:00:00.000Z"
 }
 ```
 
-Dates are stored as MongoDB dates. Create and update require a valid future date/time. `participants` contains user IDs, and event ownership is checked using `createdBy`.
+Dates are stored as MongoDB dates. Create and update require a valid future date/time. `createdBy` and `createdByEmail` record the organizer identity, while ownership checks use the stable `createdBy` user ID. `participants` contains user IDs.
 
 ## Authentication
 
