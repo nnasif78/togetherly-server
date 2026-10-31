@@ -31,7 +31,7 @@ async function startServer() {
 
   app.post("/events", async (req, res) => {
     try {
-      const { title, description, date, location, category, maxParticipants, image } = req.body;
+      const { title, description, date, location, category, maxParticipants, image, createdBy } = req.body;
 
       if (!title || !description || !date || !location || !category) {
         return res.status(400).send({ message: "Please provide all required fields." });
@@ -45,6 +45,7 @@ async function startServer() {
         category,
         maxParticipants: Number(maxParticipants) || 0,
         image: image || "",
+        createdBy,
         participants: [],
         createdAt: new Date(),
       };
