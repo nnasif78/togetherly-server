@@ -1,3 +1,4 @@
+
 import express from "express";
 import { MongoClient } from "mongodb";
 import cors from "cors";
@@ -26,6 +27,35 @@ async function startServer() {
   app.get("/events", async (req, res) => {
     const events = await db.collection("events").find().toArray();
     res.send(events);
+  });
+
+  app.post("/events", async (req, res) => {
+    try {
+      const { title, description, date, location, category, maxParticipants, image } = req.body;
+
+      if (!title || !description || !date || !location || !category) {
+        return res.status(400).send({ message: "Please provide all required fields." });
+      }
+
+      const newEvent = {
+        title,
+        description,
+        date: new Date(date),
+        location,
+        category,
+        maxParticipants: Number(maxParticipants) || 0,
+        image: image || "",
+        participants: [],
+        createdAt: new Date(),
+      };
+
+      const result = await db.collection("events").insertOne(newEvent);
+
+      res.status(201).send({ message: "Event created successfully!", eventId: result.insertedId });
+    } catch (error) {
+      console.error("Create event error:", error);
+      res.status(500).send({ message: "Failed to create event." });
+    }
   });
 
   app.listen(PORT, () => {
