@@ -3,7 +3,7 @@ import express from "express";
 import { MongoClient, ObjectId } from "mongodb";
 import cors from "cors";
 import dotenv from "dotenv";
-import { verifyToken } from "./middleware.js";
+import { verifyToken } from "./auth-middleware.js";
 
 dotenv.config();
 
