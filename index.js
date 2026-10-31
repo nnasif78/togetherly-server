@@ -1,6 +1,6 @@
 
 import express from "express";
-import { MongoClient } from "mongodb";
+import { MongoClient, ObjectId } from "mongodb";
 import cors from "cors";
 import dotenv from "dotenv";
 
@@ -58,6 +58,23 @@ async function startServer() {
       res.status(500).send({ message: "Failed to create event." });
     }
   });
+
+  app.delete("/events/:id", async (req, res) => {
+  try {
+    const result = await db.collection("events").deleteOne({
+      _id: new ObjectId(req.params.id),
+    });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).send({ message: "Event not found." });
+    }
+
+    res.send({ message: "Event deleted successfully!" });
+  } catch (error) {
+    console.error("Delete event error:", error);
+    res.status(500).send({ message: "Failed to delete event." });
+  }
+    });
 
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
