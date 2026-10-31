@@ -28,7 +28,22 @@ async function startServer() {
         const events = await db.collection("events").find().toArray();
         res.send(events);
     });
+    app.get("/events/:id", async (req, res) => {
+  try {
+    const event = await db.collection("events").findOne({
+      _id: new ObjectId(req.params.id),
+    });
 
+    if (!event) {
+      return res.status(404).send({ message: "Event not found." });
+    }
+
+    res.send(event);
+  } catch (error) {
+    console.error("Get event error:", error);
+    res.status(500).send({ message: "Failed to get event." });
+  }
+});
     app.post("/events", async (req, res) => {
         try {
             const { title, description, date, location, category, maxParticipants, image, createdBy } = req.body;
