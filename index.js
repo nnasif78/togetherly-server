@@ -75,7 +75,40 @@ async function startServer() {
     res.status(500).send({ message: "Failed to delete event." });
   }
     });
+    app.put("/events/:id", async (req, res) => {
+  try {
+    const { title, description, date, location, category, maxParticipants, image } = req.body;
 
+    if (!title || !description || !date || !location || !category) {
+      return res.status(400).send({ message: "Please provide all required fields." });
+    }
+
+    const result = await db.collection("events").updateOne(
+      { _id: new ObjectId(req.params.id) },
+      {
+        $set: {
+          title,
+          description,
+          date: new Date(date),
+          location,
+          category,
+          maxParticipants: Number(maxParticipants) || 0,
+          image: image || "",
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).send({ message: "Event not found." });
+    }
+
+    res.send({ message: "Event updated successfully!" });
+  } catch (error) {
+    console.error("Update event error:", error);
+    res.status(500).send({ message: "Failed to update event." });
+  }
+    });
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });
