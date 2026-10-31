@@ -37,6 +37,21 @@ function parseFutureEventDate(value) {
     return date;
 }
 
+function slugifyEventTitle(title) {
+    return title
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "");
+}
+
+function createEventSlug(event) {
+    const date = new Date(event.date);
+    const titleSlug = slugifyEventTitle(event.title) || "community-event";
+    return `${titleSlug}-${date.toISOString().slice(0, 10)}`;
+}
+
 async function startServer() {
     await client.connect();
     console.log("MongoDB connected!");
@@ -61,6 +76,39 @@ async function startServer() {
             .limit(6)
             .toArray();
         res.send(events);
+    });
+    app.get("/events/by-slug/:slug", async (req, res) => {
+        try {
+            const match = /^(.*)-(\d{4}-\d{2}-\d{2})$/.exec(req.params.slug);
+            if (!match) {
+                return res.status(404).send({ message: "Event not found." });
+            }
+
+            const [, , datePart] = match;
+            const date = new Date(`${datePart}T00:00:00.000Z`);
+            if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== datePart) {
+                return res.status(404).send({ message: "Event not found." });
+            }
+
+            const nextDate = new Date(date);
+            nextDate.setUTCDate(nextDate.getUTCDate() + 1);
+            const candidates = await db.collection("events")
+                .find({ date: { $gte: date, $lt: nextDate } })
+                .toArray();
+            const matches = candidates.filter((event) => createEventSlug(event) === req.params.slug);
+
+            if (matches.length === 0) {
+                return res.status(404).send({ message: "Event not found." });
+            }
+            if (matches.length > 1) {
+                return res.status(409).send({ message: "This event link is ambiguous." });
+            }
+
+            res.send(matches[0]);
+        } catch (error) {
+            console.error("Get event by slug error:", error);
+            res.status(500).send({ message: "Failed to get event." });
+        }
     });
     app.get("/events/:id", async (req, res) => {
   try {
