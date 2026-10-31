@@ -44,6 +44,42 @@ async function startServer() {
     res.status(500).send({ message: "Failed to get event." });
   }
 });
+app.get("/my-events", async (req, res) => {
+  try {
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.status(400).send({ message: "User ID is required." });
+    }
+
+    const events = await db.collection("events")
+      .find({ createdBy: userId })
+      .toArray();
+
+    res.send(events);
+  } catch (error) {
+    console.error("Get my events error:", error);
+    res.status(500).send({ message: "Failed to get your events." });
+  }
+});
+app.get("/joined-events", async (req, res) => {
+  try {
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.status(400).send({ message: "User ID is required." });
+    }
+
+    const events = await db.collection("events")
+      .find({ participants: userId })
+      .toArray();
+
+    res.send(events);
+  } catch (error) {
+    console.error("Get joined events error:", error);
+    res.status(500).send({ message: "Failed to get joined events." });
+  }
+});
     app.post("/events", async (req, res) => {
         try {
             const { title, description, date, location, category, maxParticipants, image, createdBy } = req.body;
