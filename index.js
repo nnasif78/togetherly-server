@@ -15,6 +15,28 @@ app.use(express.json());
 
 const client = new MongoClient(process.env.MONGODB_URI);
 
+function parseFutureEventDate(value) {
+    if (typeof value !== "string") return null;
+
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime()) || date.getTime() <= Date.now()) return null;
+
+    const dateParts = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+    if (dateParts) {
+        const [, year, month, day] = dateParts.map(Number);
+        const calendarDate = new Date(Date.UTC(year, month - 1, day));
+        if (
+            calendarDate.getUTCFullYear() !== year ||
+            calendarDate.getUTCMonth() !== month - 1 ||
+            calendarDate.getUTCDate() !== day
+        ) {
+            return null;
+        }
+    }
+
+    return date;
+}
+
 async function startServer() {
     await client.connect();
     console.log("MongoDB connected!");
@@ -26,7 +48,18 @@ async function startServer() {
     });
 
     app.get("/events", async (req, res) => {
-        const events = await db.collection("events").find().toArray();
+        const events = await db.collection("events")
+            .find({ date: { $gt: new Date() } })
+            .sort({ date: 1 })
+            .toArray();
+        res.send(events);
+    });
+    app.get("/recent-events", async (req, res) => {
+        const events = await db.collection("events")
+            .find({ date: { $gt: new Date() } })
+            .sort({ date: 1 })
+            .limit(6)
+            .toArray();
         res.send(events);
     });
     app.get("/events/:id", async (req, res) => {
@@ -63,6 +96,7 @@ app.get("/joined-events", verifyToken, async (req, res) => {
   try {
     const events = await db.collection("events")
       .find({ participants: req.user.id })
+      .sort({ date: 1 })
       .toArray();
 
     res.send(events);
@@ -79,10 +113,15 @@ app.get("/joined-events", verifyToken, async (req, res) => {
                 return res.status(400).send({ message: "Please provide all required fields." });
             }
 
+            const eventDate = parseFutureEventDate(date);
+            if (!eventDate) {
+                return res.status(400).send({ message: "Event date must be a valid future date and time." });
+            }
+
             const newEvent = {
                 title,
                 description,
-                date: new Date(date),
+                date: eventDate,
                 location,
                 category,
                 maxParticipants: Number(maxParticipants) || 0,
@@ -126,13 +165,18 @@ app.get("/joined-events", verifyToken, async (req, res) => {
                 return res.status(400).send({ message: "Please provide all required fields." });
             }
 
+            const eventDate = parseFutureEventDate(date);
+            if (!eventDate) {
+                return res.status(400).send({ message: "Event date must be a valid future date and time." });
+            }
+
             const result = await db.collection("events").updateOne(
                 { _id: new ObjectId(req.params.id), createdBy: req.user.id },
                 {
                     $set: {
                         title,
                         description,
-                        date: new Date(date),
+                        date: eventDate,
                         location,
                         category,
                         maxParticipants: Number(maxParticipants) || 0,
