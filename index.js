@@ -15,140 +15,147 @@ app.use(express.json());
 const client = new MongoClient(process.env.MONGODB_URI);
 
 async function startServer() {
-  await client.connect();
-  console.log("MongoDB connected!");
+    await client.connect();
+    console.log("MongoDB connected!");
 
-  const db = client.db(process.env.DATABASE_NAME);
+    const db = client.db(process.env.DATABASE_NAME);
 
-  app.get("/", (req, res) => {
-    res.send("Togetherly API is running");
-  });
-
-  app.get("/events", async (req, res) => {
-    const events = await db.collection("events").find().toArray();
-    res.send(events);
-  });
-
-  app.post("/events", async (req, res) => {
-    try {
-      const { title, description, date, location, category, maxParticipants, image, createdBy } = req.body;
-
-      if (!title || !description || !date || !location || !category) {
-        return res.status(400).send({ message: "Please provide all required fields." });
-      }
-
-      const newEvent = {
-        title,
-        description,
-        date: new Date(date),
-        location,
-        category,
-        maxParticipants: Number(maxParticipants) || 0,
-        image: image || "",
-        createdBy,
-        participants: [],
-        createdAt: new Date(),
-      };
-
-      const result = await db.collection("events").insertOne(newEvent);
-
-      res.status(201).send({ message: "Event created successfully!", eventId: result.insertedId });
-    } catch (error) {
-      console.error("Create event error:", error);
-      res.status(500).send({ message: "Failed to create event." });
-    }
-  });
-
-  app.delete("/events/:id", async (req, res) => {
-  try {
-    const result = await db.collection("events").deleteOne({
-      _id: new ObjectId(req.params.id),
+    app.get("/", (req, res) => {
+        res.send("Togetherly API is running");
     });
 
-    if (result.deletedCount === 0) {
-      return res.status(404).send({ message: "Event not found." });
-    }
+    app.get("/events", async (req, res) => {
+        const events = await db.collection("events").find().toArray();
+        res.send(events);
+    });
 
-    res.send({ message: "Event deleted successfully!" });
-  } catch (error) {
-    console.error("Delete event error:", error);
-    res.status(500).send({ message: "Failed to delete event." });
-  }
+    app.post("/events", async (req, res) => {
+        try {
+            const { title, description, date, location, category, maxParticipants, image, createdBy } = req.body;
+
+            if (!title || !description || !date || !location || !category) {
+                return res.status(400).send({ message: "Please provide all required fields." });
+            }
+
+            const newEvent = {
+                title,
+                description,
+                date: new Date(date),
+                location,
+                category,
+                maxParticipants: Number(maxParticipants) || 0,
+                image: image || "",
+                createdBy,
+                participants: [],
+                createdAt: new Date(),
+            };
+
+            const result = await db.collection("events").insertOne(newEvent);
+
+            res.status(201).send({ message: "Event created successfully!", eventId: result.insertedId });
+        } catch (error) {
+            console.error("Create event error:", error);
+            res.status(500).send({ message: "Failed to create event." });
+        }
+    });
+
+    app.delete("/events/:id", async (req, res) => {
+        try {
+            const { userId } = req.body;
+
+            if (!userId) {
+                return res.status(400).send({ message: "User ID is required." });
+            }
+
+            const result = await db.collection("events").deleteOne({
+                _id: new ObjectId(req.params.id),
+                createdBy: userId,
+            });
+
+            if (result.deletedCount === 0) {
+                return res.status(404).send({ message: "Event not found or you are not the owner." });
+            }
+
+            res.send({ message: "Event deleted successfully!" });
+        } catch (error) {
+            console.error("Delete event error:", error);
+            res.status(500).send({ message: "Failed to delete event." });
+        }
     });
     app.put("/events/:id", async (req, res) => {
-  try {
-    const { title, description, date, location, category, maxParticipants, image } = req.body;
+        try {
+            const { title, description, date, location, category, maxParticipants, image } = req.body;
 
-    if (!title || !description || !date || !location || !category) {
-      return res.status(400).send({ message: "Please provide all required fields." });
-    }
+            if (!title || !description || !date || !location || !category) {
+                return res.status(400).send({ message: "Please provide all required fields." });
+            }
 
-    const result = await db.collection("events").updateOne(
-      { _id: new ObjectId(req.params.id) },
-      {
-        $set: {
-          title,
-          description,
-          date: new Date(date),
-          location,
-          category,
-          maxParticipants: Number(maxParticipants) || 0,
-          image: image || "",
-          updatedAt: new Date(),
-        },
-      }
-    );
+            const result = await db.collection("events").updateOne(
+                { _id: new ObjectId(req.params.id) },
+                {
+                    $set: {
+                        title,
+                        description,
+                        date: new Date(date),
+                        location,
+                        category,
+                        maxParticipants: Number(maxParticipants) || 0,
+                        image: image || "",
+                        updatedAt: new Date(),
+                    },
+                }
+            );
 
-    if (result.matchedCount === 0) {
-      return res.status(404).send({ message: "Event not found." });
-    }
+            if (result.matchedCount === 0) {
+                return res.status(404).send({ message: "Event not found." });
+            }
 
-    res.send({ message: "Event updated successfully!" });
-  } catch (error) {
-    console.error("Update event error:", error);
-    res.status(500).send({ message: "Failed to update event." });
-  }
-    });
-    
-app.post("/events/:id/join", async (req, res) => {
-  try {
-    const { userId } = req.body;
-
-    if (!userId) {
-      return res.status(400).send({ message: "User ID is required." });
-    }
-
-    const event = await db.collection("events").findOne({
-      _id: new ObjectId(req.params.id),
+            res.send({ message: "Event updated successfully!" });
+        } catch (error) {
+            console.error("Update event error:", error);
+            res.status(500).send({ message: "Failed to update event." });
+        }
     });
 
-    if (!event) {
-      return res.status(404).send({ message: "Event not found." });
-    }
+    app.post("/events/:id/join", async (req, res) => {
+        try {
+            const { userId } = req.body;
 
-    if (event.participants?.includes(userId)) {
-      return res.status(400).send({ message: "You have already joined this event." });
-    }
+            if (!userId) {
+                return res.status(400).send({ message: "User ID is required." });
+            }
 
-    if (event.participants?.length >= event.maxParticipants) {
-      return res.status(400).send({ message: "This event is full." });
-    }
+            const event = await db.collection("events").findOne({
+                _id: new ObjectId(req.params.id),
+            });
 
-    await db.collection("events").updateOne(
-      { _id: new ObjectId(req.params.id) },
-      { $addToSet: { participants: userId } }
-    );
+            if (!event) {
+                return res.status(404).send({ message: "Event not found." });
+            }
 
-    res.send({ message: "You joined the event successfully!" });
-  } catch (error) {
-    console.error("Join event error:", error);
-    res.status(500).send({ message: "Failed to join event." });
-  }
-});
+            if (event.participants?.includes(userId)) {
+                return res.status(400).send({ message: "You have already joined this event." });
+            }
 
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
+            if (event.participants?.length >= event.maxParticipants) {
+                return res.status(400).send({ message: "This event is full." });
+            }
+
+            await db.collection("events").updateOne(
+                { _id: new ObjectId(req.params.id) },
+                { $addToSet: { participants: userId } }
+            );
+
+            res.send({ message: "You joined the event successfully!" });
+        } catch (error) {
+            console.error("Join event error:", error);
+            res.status(500).send({ message: "Failed to join event." });
+        }
+    });
+
+    app.listen(PORT, () => {
+        console.log(`Server running on port ${PORT}`);
+    });
 }
 
 startServer();
