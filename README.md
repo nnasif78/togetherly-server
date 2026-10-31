@@ -110,7 +110,7 @@ curl -X POST https://togetherly-server-theta.vercel.app/events/EVENT_ID/join \
   -H 'Authorization: Bearer YOUR_BETTER_AUTH_JWT'
 ```
 
-The server adds the user ID to `participants`. It rejects duplicate joins and events at capacity with `400`.
+The server stores a join record in the `eventJoins` collection with the event ID, a snapshot of event details, the authenticated user's ID and email, and the join time. It also adds the user ID to the event's `participants` array for capacity checks and event details. A unique index prevents duplicate event/user join records. Duplicate joins and events at capacity are rejected with `400`.
 
 </details>
 
@@ -148,6 +148,8 @@ Event documents live in the `events` MongoDB collection. A typical document has 
 ```
 
 Dates are stored as MongoDB dates. Create and update require a valid future date/time. `createdBy` and `createdByEmail` record the organizer identity, while ownership checks use the stable `createdBy` user ID. `participants` contains user IDs.
+
+Join records live in the `eventJoins` collection. Each record stores `eventId`, `userId`, nested `event` and `user` snapshots, and `joinedAt`. The API creates a unique compound index on `{ eventId, userId }` when it connects to MongoDB. The joined-events endpoint reads these records and also includes memberships already present in legacy event `participants` arrays.
 
 ## Authentication
 

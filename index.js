@@ -33,10 +33,15 @@ app.get("/", (req, res) => {
 app.use(async (req, res, next) => {
     try {
         if (!connectionPromise) {
-            connectionPromise = client.connect().catch((error) => {
-                connectionPromise = undefined;
-                throw error;
-            });
+            connectionPromise = client.connect()
+                .then(() => db.collection("eventJoins").createIndex(
+                    { eventId: 1, userId: 1 },
+                    { unique: true, name: "unique_event_user_join" }
+                ))
+                .catch((error) => {
+                    connectionPromise = undefined;
+                    throw error;
+                });
         }
         await connectionPromise;
         next();
@@ -163,8 +168,19 @@ app.get("/my-events", verifyToken, async (req, res) => {
 });
 app.get("/joined-events", verifyToken, async (req, res) => {
   try {
+    const joinRecords = await db.collection("eventJoins")
+      .find({ userId: req.user.id })
+      .project({ eventId: 1 })
+      .toArray();
+    const joinedEventIds = joinRecords.map((join) => join.eventId);
+
     const events = await db.collection("events")
-      .find({ participants: req.user.id })
+      .find({
+        $or: [
+          { participants: req.user.id },
+          { _id: { $in: joinedEventIds } },
+        ],
+      })
       .sort({ date: 1 })
       .toArray();
 
@@ -271,7 +287,47 @@ app.get("/joined-events", verifyToken, async (req, res) => {
         try {
             const eventId = new ObjectId(req.params.id);
             const userId = req.user.id;
-            const result = await db.collection("events").updateOne(
+            const events = db.collection("events");
+            const event = await events.findOne({ _id: eventId });
+
+            if (!event) {
+                return res.status(404).send({ message: "Event not found." });
+            }
+
+            let joinResult;
+            try {
+                joinResult = await db.collection("eventJoins").insertOne({
+                    eventId,
+                    userId,
+                    user: {
+                        id: userId,
+                        email: req.user.email,
+                    },
+                    event: {
+                        id: event._id,
+                        title: event.title,
+                        description: event.description,
+                        date: event.date,
+                        location: event.location,
+                        category: event.category,
+                        image: event.image || "",
+                    },
+                    joinedAt: new Date(),
+                });
+            } catch (error) {
+                if (error?.code === 11000) {
+                    return res.status(400).send({ message: "You have already joined this event." });
+                }
+                throw error;
+            }
+
+            if (event.participants?.includes(userId)) {
+                return res.send({ message: "You joined the event successfully!" });
+            }
+
+            let result;
+            try {
+                result = await events.updateOne(
                 {
                     _id: eventId,
                     participants: { $ne: userId },
@@ -283,14 +339,29 @@ app.get("/joined-events", verifyToken, async (req, res) => {
                     },
                 },
                 { $addToSet: { participants: userId } }
-            );
+                );
+            } catch (error) {
+                try {
+                    await db.collection("eventJoins").deleteOne({ _id: joinResult.insertedId });
+                } catch (cleanupError) {
+                    console.error("Failed to roll back event join record:", cleanupError);
+                }
+                throw error;
+            }
 
             if (result.matchedCount === 0) {
-                const event = await db.collection("events").findOne({ _id: eventId });
-                if (!event) return res.status(404).send({ message: "Event not found." });
-                if (event.participants?.includes(userId)) {
-                    return res.status(400).send({ message: "You have already joined this event." });
+                const currentEvent = await events.findOne({ _id: eventId });
+
+                if (!currentEvent) {
+                    await db.collection("eventJoins").deleteOne({ _id: joinResult.insertedId });
+                    return res.status(404).send({ message: "Event not found." });
                 }
+
+                if (currentEvent.participants?.includes(userId)) {
+                    return res.send({ message: "You joined the event successfully!" });
+                }
+
+                await db.collection("eventJoins").deleteOne({ _id: joinResult.insertedId });
                 return res.status(400).send({ message: "This event is full." });
             }
 
