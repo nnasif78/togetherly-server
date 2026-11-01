@@ -88,7 +88,7 @@ function createEventSlug(event) {
     return `${titleSlug}-${date.toISOString().slice(0, 10)}`;
 }
 
-    app.get("/events", verifyToken, async (req, res) => {
+    app.get("/events", async (req, res) => {
         const events = await db.collection("events")
             .find({ date: { $gt: new Date() } })
             .sort({ date: 1 })
