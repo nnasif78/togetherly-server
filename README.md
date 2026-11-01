@@ -17,6 +17,7 @@
 <summary><strong>Contents</strong></summary>
 
 - [What the API provides](#what-the-api-provides)
+- [Technology](#technology)
 - [Architecture](#architecture)
 - [API reference](#api-reference)
 - [Event data](#event-data)
@@ -33,13 +34,25 @@
 
 ## What the API provides
 
-Togetherly Server is an Express 5 API deployed as a Vercel Node.js function. It stores events in MongoDB and exposes public event discovery plus authenticated organizer and attendee actions. The frontend uses Better Auth to sign users in and sends a JWT when it calls a protected route.
+Togetherly Server is an Express 5 API deployed as a Vercel Node.js function. It stores events in MongoDB and exposes public recent-event and event-detail reads, plus authenticated catalogue, organizer, and attendee actions. The frontend uses Better Auth to sign users in and sends a JWT when it calls a protected route.
+
+## Technology
+
+| Area | Technologies |
+| --- | --- |
+| Runtime and package manager | Node.js `24.x`, npm, ES modules |
+| HTTP API | Express `5.3`, Vercel Node.js functions |
+| Database | MongoDB, `mongodb` Node.js driver |
+| Authentication | Better Auth JWTs, `jose` for signature and claim verification, remote JWKS |
+| Middleware and configuration | `cors`, `dotenv` |
+| Local development | `nodemon` (development dependency), Node.js `dev.js` entry point |
+| Related client | Next.js App Router, React, TypeScript, Better Auth; see the [client technology list](https://github.com/nnasif78/togetherly-client#technology) |
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    Browser[Next.js client] -->|public reads / Bearer JWT| API[Express API]
+    Browser[Next.js client] -->|public recent/detail reads / Bearer JWT| API[Express API]
     API -->|verify JWT signature and claims| Auth[Better Auth JWKS]
     API --> DB[(MongoDB events)]
     Browser -->|sign in and account data| Auth
@@ -54,7 +67,7 @@ The deployed base URL is `https://togetherly-server-theta.vercel.app`. Routes ar
 | Method | Path | Access | Description |
 | --- | --- | --- | --- |
 | `GET` | `/` | Public | Health check. Returns `Togetherly API is running`. |
-| `GET` | `/events` | Public | Upcoming events ordered by date, soonest first. |
+| `GET` | `/events` | JWT required | Upcoming events ordered by date, soonest first. |
 | `GET` | `/recent-events` | Public | Up to six upcoming events ordered by date. |
 | `GET` | `/events/by-slug/:slug` | Public | Find an event using its normalized title and UTC date, e.g. `park-cleanup-2026-11-10`. |
 | `GET` | `/events/:id` | Public | Find a single event by MongoDB ObjectId. |
@@ -73,10 +86,11 @@ The slug route is registered before `/events/:id` so that `by-slug` is interpret
 <summary><strong>Read upcoming events</strong></summary>
 
 ```bash
-curl https://togetherly-server-theta.vercel.app/events
+curl https://togetherly-server-theta.vercel.app/events \
+  -H 'Authorization: Bearer YOUR_BETTER_AUTH_JWT'
 ```
 
-Returns a JSON array of upcoming event records.
+Returns a JSON array of upcoming event records. Requests without a valid JWT receive `401`.
 
 </details>
 
